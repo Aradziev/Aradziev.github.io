@@ -413,8 +413,7 @@ if (hinted) $("hint").hidden = true;
 const clamp = t => Math.min(Math.max(t, T_LO), T_HI);
 const stopAnim = () => { if (anim) cancelAnimationFrame(anim); anim = null; };
 const hideHint = () => { if (!hinted) { hinted = true; $("hint").style.opacity = 0; store.set("hinted", true); } };
-const ptrs = new Map(); let pinch = null, downX = 0, downT = 0, moved = 0, lastEx = null;
-function tick() { const i = bsearch(EX, center, e => e.t); if (lastEx !== null && i !== lastEx && dragging && navigator.vibrate) navigator.vibrate(8); lastEx = i; }
+const ptrs = new Map(); let pinch = null, downX = 0, downT = 0, moved = 0;
 chart.addEventListener("pointerdown", e => {
   stopAnim(); chart.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, e.clientX); hideHint();
   if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.abs(a - b) || 1, z: zoom, mid: (a + b) / 2 - chart.getBoundingClientRect().left }; dragging = false; return; }
@@ -426,7 +425,7 @@ chart.addEventListener("pointermove", e => {
   if (!dragging) return;
   const n = performance.now(), dx = e.clientX - lx, dt = Math.max(n - lt, 1);
   moved = Math.max(moved, Math.abs(e.clientX - downX));
-  center = clamp(center - dx / pxPerMs); vel = 0.8 * (dx / dt) + 0.2 * vel; lx = e.clientX; lt = n; tick(); draw();
+  center = clamp(center - dx / pxPerMs); vel = 0.8 * (dx / dt) + 0.2 * vel; lx = e.clientX; lt = n; draw();
 });
 function release(e) {
   ptrs.delete(e.pointerId);
