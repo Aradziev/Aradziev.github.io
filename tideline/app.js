@@ -197,7 +197,16 @@ function heightAt(t) {
 function nextExtreme(t) { for (const e of EX) if (e.t > t) return e; return null; }
 
 // ---------- weather (Open-Meteo, free, no key) ----------
-let wx = null;
+let wx = null, pierTemp = null;
+async function loadPierTemp(st) {
+  pierTemp = null;
+  try {
+    const u = new URL(NOAA);
+    Object.entries({ product: "water_temperature", station: st.id, date: "latest", units: "english", time_zone: "gmt", format: "json", application: APP }).forEach(([k, v]) => u.searchParams.set(k, v));
+    const j = await (await fetch(u)).json(); const d = j.data && j.data[0];
+    if (st.id === station.id && d && d.v !== "") { pierTemp = { t: parseGMT(d.t), v: +d.v }; lastMin = null; draw(true); }
+  } catch { /* many stations have no sensor */ }
+}
 async function loadWeather(st) {
   const key = "wx:" + st.id, c = store.get(key);
   if (c && Date.now() - c.at < HOUR) { wx = c; draw(true); return; }
@@ -229,10 +238,12 @@ function updateWeather(t) {
   $("wind2").textContent = fi != null && F.wind_gusts_10m[fi] != null ? `gusts ${fmtNum(F.wind_gusts_10m[fi])}` : "";
   const sh = mi != null ? fmtNum(M.swell_wave_height[mi], 1) : null;
   $("swell").textContent = sh != null ? `${sh} ft · ${fmtNum(M.swell_wave_period[mi])}s` : "—";
-  $("swell2").textContent = sh != null ? `from ${compass(M.swell_wave_direction[mi])} · seas ${fmtNum(M.wave_height[mi], 1) ?? "—"} ft` : "";
+  $("swell2").textContent = sh != null ? `${compass(M.swell_wave_direction[mi])} · seas ${fmtNum(M.wave_height[mi], 1) ?? "—"}` : "";
   const sst = mi != null && M.sea_surface_temperature[mi] != null ? (M.sea_surface_temperature[mi] * 9 / 5 + 32) : null;
   const air = fi != null ? fmtNum(F.temperature_2m[fi]) : null;
-  $("temp").textContent = sst != null ? `${sst.toFixed(0)}°F` : "—";
+  const usePier = pierTemp && Math.abs(t - pierTemp.t) < 3 * HOUR;
+  $("temp").textContent = usePier ? `${pierTemp.v.toFixed(0)}°F` : sst != null ? `${sst.toFixed(0)}°F` : "—";
+  $("tempK").textContent = usePier ? "Water (pier) · Air" : "Water · Air";
   $("temp2").textContent = air != null ? `air ${air}°F` : "";
 }
 
@@ -241,7 +252,21 @@ const chart = $("chart"), cv = $("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, dpr = 1, pxPerMs = 0;
 const T_LO = Date.now() - 365 * DAY, T_HI = Date.now() + 2 * 365 * DAY;
 let center = Date.now();
-function resize() { dpr = Math.min(window.devicePixelRatio || 1, 3); W = chart.clientWidth; H = chart.clientHeight; cv.width = W * dpr; cv.height = H * dpr; pxPerMs = Math.max(W, 320) / (22 * HOUR); draw(); }
+// Horizontal scale follows the chart's height too, so wide screens show more days instead of flattening the waves
+let zoom = store.get("zoom", 1);
+function setScale() {
+  const base = Math.min(Math.max(W, 320) / 22, Math.max(H - 142, 200) * 0.055);
+  pxPerMs = (base * zoom) / HOUR;
+}
+function resize() { dpr = Math.min(window.devicePixelRatio || 1, 3); W = chart.clientWidth; H = chart.clientHeight; cv.width = W * dpr; cv.height = H * dpr; setScale(); draw(); }
+function setZoom(z, anchorX) {
+  const anchorT = center + ((anchorX ?? W / 2) - W / 2) / pxPerMs;
+  const minZ = (W / (7 * 24)) / (Math.min(Math.max(W, 320) / 22, Math.max(H - 142, 200) * 0.055)); // at most 7 days on screen
+  const maxZ = (W / 6) / (Math.min(Math.max(W, 320) / 22, Math.max(H - 142, 200) * 0.055));        // at least 6 hours on screen
+  zoom = Math.min(Math.max(z, Math.min(minZ, 1)), Math.max(maxZ, 1)); setScale();
+  center = clamp(anchorT - ((anchorX ?? W / 2) - W / 2) / pxPerMs);
+  store.set("zoom", zoom); draw();
+}
 const yOf = h => { const r = yRange || { min: -2, max: 7 }, top = 78, bot = H - 64; return top + (r.max - h) / (r.max - r.min) * (bot - top); };
 const xOf = t => W / 2 + (t - center) * pxPerMs;
 const MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
@@ -293,7 +318,7 @@ function draw(forceReadout) {
     const y = yOf(e.h); ctx.globalAlpha = Math.abs(x - W / 2) < 46 ? 0.25 : 1;
     const ft = e.h.toFixed(2) + " ft", tm = fmtTime.format(e.t);
     if (e.hi) { ctx.fillStyle = "#e7f1f4"; ctx.font = "500 14px " + MONO; ctx.fillText(ft, x, y - 44); ctx.fillStyle = "#8aa6b1"; ctx.font = "400 12px " + MONO; ctx.fillText(tm, x, y - 28); }
-    else { ctx.fillStyle = "#e7f1f4"; ctx.font = "500 14px " + MONO; ctx.fillText(ft, x, y + 26); ctx.fillStyle = "rgba(231,241,244,0.7)"; ctx.font = "400 12px " + MONO; ctx.fillText(tm, x, y + 42); }
+    else { ctx.fillStyle = e.h < 0 ? "#ffc861" : "#e7f1f4"; ctx.font = "500 14px " + MONO; ctx.fillText(ft, x, y + 26); ctx.fillStyle = "rgba(231,241,244,0.7)"; ctx.font = "400 12px " + MONO; ctx.fillText(tm, x, y + 42); }
     ctx.globalAlpha = 1;
   }
 
@@ -322,7 +347,7 @@ function updateReadout(force) {
   $("h").textContent = Number.isNaN(h) ? "—" : h.toFixed(1);
   $("t").textContent = fmtTime.format(t);
   const nx = nextExtreme(t);
-  $("next").innerHTML = nx && !Number.isNaN(h) ? `<span aria-hidden="true">${nx.hi ? "▲" : "▼"}</span> ${nx.hi ? "High" : "Low"} in <b>${dur(nx.t - t)}</b>` : (pending.size ? "Loading tides…" : "—");
+  $("next").innerHTML = nx && !Number.isNaN(h) ? `<span aria-hidden="true">${nx.hi ? "▲" : "▼"}</span> ${nx.hi ? "High" : "Low"} ${nx.h.toFixed(1)} ft in <b>${dur(nx.t - t)}</b>` : (pending.size ? "Loading tides…" : "—");
   const day = localMidnight(t), age = moonAge(t);
   if (day !== lastDay || force) {
     lastDay = day; $("date").textContent = fmtDate.format(t);
@@ -344,16 +369,40 @@ if (hinted) $("hint").hidden = true;
 const clamp = t => Math.min(Math.max(t, T_LO), T_HI);
 const stopAnim = () => { if (anim) cancelAnimationFrame(anim); anim = null; };
 const hideHint = () => { if (!hinted) { hinted = true; $("hint").style.opacity = 0; store.set("hinted", true); } };
-chart.addEventListener("pointerdown", e => { stopAnim(); dragging = true; lx = e.clientX; lt = performance.now(); vel = 0; chart.setPointerCapture(e.pointerId); hideHint(); });
-chart.addEventListener("pointermove", e => { if (!dragging) return; const n = performance.now(), dx = e.clientX - lx, dt = Math.max(n - lt, 1); center = clamp(center - dx / pxPerMs); vel = 0.8 * (dx / dt) + 0.2 * vel; lx = e.clientX; lt = n; draw(); });
-function release() {
-  if (!dragging) return; dragging = false; if (performance.now() - lt > 80) vel = 0;
+const ptrs = new Map(); let pinch = null, downX = 0, downT = 0, moved = 0, lastEx = null;
+function tick() { const i = bsearch(EX, center, e => e.t); if (lastEx !== null && i !== lastEx && dragging && navigator.vibrate) navigator.vibrate(8); lastEx = i; }
+chart.addEventListener("pointerdown", e => {
+  stopAnim(); chart.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, e.clientX); hideHint();
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = { d: Math.abs(a - b) || 1, z: zoom, mid: (a + b) / 2 - chart.getBoundingClientRect().left }; dragging = false; return; }
+  dragging = true; lx = downX = e.clientX; lt = downT = performance.now(); vel = 0; moved = 0;
+});
+chart.addEventListener("pointermove", e => {
+  if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, e.clientX);
+  if (pinch && ptrs.size === 2) { const [a, b] = [...ptrs.values()]; setZoom(pinch.z * (Math.abs(a - b) || 1) / pinch.d, pinch.mid); return; }
+  if (!dragging) return;
+  const n = performance.now(), dx = e.clientX - lx, dt = Math.max(n - lt, 1);
+  moved = Math.max(moved, Math.abs(e.clientX - downX));
+  center = clamp(center - dx / pxPerMs); vel = 0.8 * (dx / dt) + 0.2 * vel; lx = e.clientX; lt = n; tick(); draw();
+});
+function release(e) {
+  ptrs.delete(e.pointerId);
+  if (pinch) { if (ptrs.size < 2) pinch = null; return; }
+  if (!dragging) return; dragging = false;
+  if (moved < 6 && performance.now() - downT < 350) { // tap: glide the cursor to that moment
+    const x = e.clientX - chart.getBoundingClientRect().left; glideTo(center + (x - W / 2) / pxPerMs); return;
+  }
+  if (performance.now() - lt > 80) vel = 0;
   let v = vel, prev = performance.now();
   const step = n => { const dt = n - prev; prev = n; v *= Math.pow(0.994, dt); center = clamp(center - (v * dt) / pxPerMs); draw(); anim = Math.abs(v) > 0.02 ? requestAnimationFrame(step) : null; };
   if (Math.abs(v) > 0.05) anim = requestAnimationFrame(step);
 }
 chart.addEventListener("pointerup", release); chart.addEventListener("pointercancel", release);
-chart.addEventListener("wheel", e => { e.preventDefault(); stopAnim(); hideHint(); const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY; center = clamp(center + d / pxPerMs); draw(); }, { passive: false });
+chart.addEventListener("wheel", e => {
+  e.preventDefault(); stopAnim(); hideHint();
+  if (e.ctrlKey || e.metaKey) { setZoom(zoom * Math.exp(-e.deltaY * 0.01), e.clientX - chart.getBoundingClientRect().left); return; }
+  const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY; center = clamp(center + d / pxPerMs); draw();
+}, { passive: false });
+window.addEventListener("keydown", e => { if ($("sheet").hidden && (e.key === "+" || e.key === "=")) setZoom(zoom * 1.25); if ($("sheet").hidden && (e.key === "-" || e.key === "_")) setZoom(zoom / 1.25); });
 window.addEventListener("keydown", e => { if ($("sheet").hidden && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { stopAnim(); center = clamp(center + (e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? 6 * HOUR : 15 * MIN)); draw(); } });
 function glideTo(to) {
   stopAnim(); const from = center, st = performance.now(), D = 600, reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -372,7 +421,7 @@ function setStation(st) {
   $("stName").textContent = st.name + (st.state ? ", " + st.state : "");
   $("stMeta").textContent = `NOAA ${st.id} · MLLW${st.type === "S" ? " · high/low only" : ""}`;
   $("fav").setAttribute("aria-pressed", favs.some(f => f.id === st.id) ? "true" : "false");
-  draw(true); loadWeather(st);
+  draw(true); loadWeather(st); loadPierTemp(st);
 }
 $("fav").addEventListener("click", () => {
   const i = favs.findIndex(f => f.id === station.id);

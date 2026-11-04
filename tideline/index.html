@@ -31,6 +31,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--display); ov
 [hidden] { display: none !important; }
 .app { height: 100%; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); background: radial-gradient(120% 60% at 20% 0%, var(--bg-2) 0%, var(--bg) 70%); }
 .gutter { padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+.readout, .bar-inner { width: 100%; max-width: 760px; margin-inline: auto; }
 .readout { display: grid; grid-template-columns: auto 1fr; gap: 14px 16px; align-items: center; padding-block: 18px 10px; }
 .moon-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
 #moon { width: 80px; height: 80px; }
@@ -85,7 +86,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--display); ov
 </head>
 <body>
 <div class="app">
-  <section class="readout gutter">
+  <div class="gutter"><section class="readout">
     <div class="moon-wrap">
       <canvas id="moon" width="160" height="160" aria-label="Moon phase"></canvas>
       <div class="date" id="date">—</div>
@@ -104,15 +105,15 @@ body { background: var(--bg); color: var(--ink); font-family: var(--display); ov
     <div class="row cond">
       <div><span class="k">Wind</span><b id="wind">—</b><span class="s" id="wind2"></span></div>
       <div><span class="k">Swell</span><b id="swell">—</b><span class="s" id="swell2"></span></div>
-      <div><span class="k">Water · Air</span><b id="temp">—</b><span class="s" id="temp2"></span></div>
+      <div><span class="k" id="tempK">Water · Air</span><b id="temp">—</b><span class="s" id="temp2"></span></div>
     </div>
-  </section>
+  </section></div>
   <div class="chart" id="chart">
     <canvas id="c"></canvas>
     <div class="status" id="status" hidden></div>
     <div class="hint" id="hint">← swipe through time →</div>
   </div>
-  <footer class="bar gutter">
+  <footer class="bar gutter"><div class="bar-inner" style="display:flex;align-items:center;gap:8px">
     <button class="icon-btn" id="fav" aria-pressed="false" aria-label="Save station"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/></svg></button>
     <button id="stationBtn" aria-label="Change station"><strong id="stName">La Jolla</strong><span id="stMeta">NOAA 9410230 · MLLW</span></button>
     <button class="icon-btn" id="calBtn" aria-label="Jump to date"><svg viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg></button>
