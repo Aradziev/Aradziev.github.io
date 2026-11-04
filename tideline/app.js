@@ -475,10 +475,25 @@ $("locate").addEventListener("click", () => {
 });
 
 // ---------- boot ----------
+const firstRun = !store.get("station:last");
 setFormatters();
 new ResizeObserver(resize).observe(chart);
 document.fonts && document.fonts.ready.then(() => draw(true));
 setStation(station);
 resize();
+// First open: start at the station nearest the viewer (La Jolla stays as the fallback)
+if (firstRun && navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(async p => {
+    here = { lat: p.coords.latitude, lng: p.coords.longitude }; store.set("here", here);
+    try {
+      const list = await loadStations();
+      const byDist = [...list].sort((a, b) => km(here, a) - km(here, b));
+      // prefer a full-curve reference station if one is reasonably close
+      const ref = byDist.find(s => s.type === "R");
+      const pick = ref && km(here, ref) < Math.max(40, km(here, byDist[0]) * 2) ? ref : byDist[0];
+      if (pick && pick.id !== station.id && km(here, pick) < 500) setStation(pick);
+    } catch { /* keep the default */ }
+  }, () => {}, { timeout: 15000, maximumAge: 30 * MIN });
+}
 setInterval(() => { if (!dragging && !anim && Math.abs(center - Date.now()) < 2 * MIN) { center = Date.now(); draw(); } }, 30e3);
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
