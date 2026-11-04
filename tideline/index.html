@@ -79,6 +79,11 @@ body { background: var(--bg); color: var(--ink); font-family: var(--display); ov
 .sheet input[type=search] { flex: 1; min-width: 0; font: 400 16px var(--display); color: var(--ink); background: #0c1f29; border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; }
 .sheet .close { font: 500 14px var(--mono); color: var(--ink-dim); background: none; border: 0; padding: 10px 6px; cursor: pointer; }
 .locate { margin-bottom: 8px; font: 500 13px var(--mono); color: var(--bg); background: var(--buoy); border: 0; border-radius: 999px; padding: 9px 16px; cursor: pointer; align-self: flex-start; }
+.welcome { padding-block: 28px 4px; }
+.welcome h2 { font: 300 30px var(--display); margin: 0 0 8px; text-wrap: balance; }
+.welcome p { font-size: 15px; line-height: 1.5; color: var(--ink-dim); margin: 0; max-width: 46ch; }
+.locate.ghost { background: none; color: var(--ink-dim); border: 1px solid var(--line); }
+.st .n small { display: block; font: 400 11px var(--mono); color: var(--ink-dim); margin-top: 2px; }
 .list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .list h3 { font: 500 10px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-dim); margin: 16px 0 6px; }
 .st { width: 100%; display: flex; justify-content: space-between; gap: 12px; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); padding: 12px 0; cursor: pointer; font: inherit; }
@@ -133,15 +138,19 @@ body { background: var(--bg); color: var(--ink); font-family: var(--display); ov
 </div>
 
 <div class="sheet" id="sheet" hidden>
+  <div class="welcome gutter" id="welcome" hidden>
+    <h2>Where's your spot?</h2>
+    <p>Type a beach, town or address and Tideline will use the closest NOAA tide station. Nothing is shared until you pick a place.</p>
+  </div>
   <div class="sheet-head gutter">
-    <input type="search" id="q" placeholder="Search stations, e.g. Scripps, Mission Bay" autocomplete="off" enterkeyhint="search">
+    <input type="search" id="q" placeholder="Beach, town, address or station" autocomplete="off" enterkeyhint="search">
     <button class="close" id="closeSheet">Close</button>
   </div>
-  <div class="gutter" style="display:flex"><button class="locate" id="locate">Find nearest to me</button></div>
+  <div class="gutter" style="display:flex"><button class="locate" id="locate">Use my location instead</button></div>
   <div class="list gutter" id="list"></div>
-  <div class="foot gutter">Tide predictions: NOAA CO-OPS (MLLW, feet). Wind, swell and temperature: Open-Meteo. Not for navigation.</div>
+  <div class="foot gutter">Tide predictions: NOAA CO-OPS (MLLW, feet). Wind, swell and temperature: Open-Meteo. Place search: Photon (OpenStreetMap data). Not for navigation.</div>
 </div>
-<script src="fallback.js?v=7"></script>
-<script src="app.js?v=7"></script>
+<script src="fallback.js?v=8"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

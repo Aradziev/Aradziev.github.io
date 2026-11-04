@@ -472,48 +472,96 @@ $("fav").addEventListener("click", () => {
   store.set("favs", favs); $("fav").setAttribute("aria-pressed", i >= 0 ? "false" : "true");
 });
 
-// ---------- picker ----------
+// ---------- picker: place search (Photon) + station list ----------
 let here = store.get("here", null);
 const km = (a, b) => { const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r; const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2; return 12742 * Math.asin(Math.sqrt(x)); };
+const miles = k => `${(k * 0.621).toFixed(k < 16 ? 1 : 0)} mi`;
+const US = new Set(["US", "PR", "VI", "GU", "AS", "MP"]);
+function nearestStation(p) {
+  const byDist = [...stations].sort((a, b) => km(p, a) - km(p, b));
+  const ref = byDist.find(s => s.type === "R"); // full 6-minute curve if reasonably close
+  return ref && km(p, ref) < Math.max(40, km(p, byDist[0]) * 2) ? ref : byDist[0];
+}
+let places = [], placeCtl = null, placeTimer = null;
+function searchPlaces(q) {
+  clearTimeout(placeTimer); if (placeCtl) placeCtl.abort();
+  if (q.length < 3) { places = []; return; }
+  placeTimer = setTimeout(async () => {
+    placeCtl = new AbortController();
+    try {
+      const u = new URL("https://photon.komoot.io/api/");
+      u.searchParams.set("q", q); u.searchParams.set("limit", "10"); u.searchParams.set("lang", "en");
+      u.searchParams.set("lat", station.lat); u.searchParams.set("lon", station.lng);
+      const j = await (await fetch(u, { signal: placeCtl.signal })).json();
+      const seen = new Set();
+      places = j.features.filter(f => US.has(f.properties.countrycode)).map(f => {
+        const p = f.properties, sub = [p.city && p.city !== p.name ? p.city : null, p.county && !p.city ? p.county + " County" : null, p.state].filter(Boolean).join(", ");
+        return { name: p.name || p.street || p.city || "Place", sub, lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0] };
+      }).filter(p => { const k = p.name + "|" + p.sub; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 6);
+      if ($("q").value.trim() === q) renderList();
+    } catch (e) { if (e.name !== "AbortError") { places = []; renderList(); } }
+  }, 250);
+}
+async function choosePlace(p) {
+  if (!stations) { try { await loadStations(); } catch { showStatus("Couldn't load the station list. Check your connection.", true); return; } }
+  const st = nearestStation(p); here = { lat: p.lat, lng: p.lng }; store.set("here", here);
+  closeSheet(); setStation(st);
+  showStatus(`Nearest station to ${p.name}: ${st.name} · ${miles(km(p, st))}`); setTimeout(hideStatus, 4000);
+}
+function placeRow(p) {
+  const b = document.createElement("button"); b.className = "st";
+  b.innerHTML = `<span class="n"><span></span><small></small></span><span class="m">place</span>`;
+  b.querySelector(".n span").textContent = p.name; b.querySelector(".n small").textContent = p.sub;
+  b.addEventListener("click", () => choosePlace(p)); return b;
+}
 function row(st) {
   const b = document.createElement("button"); b.className = "st";
-  const d = here ? ` · ${(km(here, st) * 0.621).toFixed(km(here, st) < 16 ? 1 : 0)} mi` : "";
   b.innerHTML = `<span class="n"></span><span class="m"></span>`;
   b.querySelector(".n").textContent = st.name + (st.state ? ", " + st.state : "");
-  b.querySelector(".m").textContent = `${st.id}${st.type === "S" ? " · H/L" : ""}${d}`;
+  b.querySelector(".m").textContent = `${st.id}${st.type === "S" ? " · H/L" : ""}${here ? " · " + miles(km(here, st)) : ""}`;
   b.addEventListener("click", () => { closeSheet(); setStation(st); });
   return b;
 }
-function section(title, items, emptyMsg) {
+function section(title, items, emptyMsg, make = row) {
   const frag = document.createDocumentFragment(); const h = document.createElement("h3"); h.textContent = title; frag.append(h);
-  if (!items.length) { const p = document.createElement("div"); p.className = "empty"; p.textContent = emptyMsg; frag.append(p); }
-  items.forEach(s => frag.append(row(s))); return frag;
+  if (!items.length && emptyMsg) { const p = document.createElement("div"); p.className = "empty"; p.textContent = emptyMsg; frag.append(p); }
+  items.forEach(s => frag.append(make(s))); return frag;
 }
 function renderList() {
   const q = $("q").value.trim().toLowerCase(), L = $("list"); L.textContent = "";
   if (q) {
-    if (!stations) { L.append(section("Results", [], "Loading station list…")); return; }
-    const words = q.split(/\s+/);
-    const res = stations.filter(s => { const hay = (s.name + " " + s.state + " " + s.id).toLowerCase(); return words.every(w => hay.includes(w)); });
-    if (here) res.sort((a, b) => km(here, a) - km(here, b));
-    L.append(section(`Results (${res.length})`, res.slice(0, 60), "No stations match. Try a nearby town or bay name."));
+    if (places.length) L.append(section("Places", places, "", placeRow));
+    else if (q.length >= 3) L.append(section("Places", [], "Searching…", placeRow));
+    if (stations) {
+      const words = q.split(/\s+/);
+      const res = stations.filter(s => { const hay = (s.name + " " + s.state + " " + s.id).toLowerCase(); return words.every(w => hay.includes(w)); });
+      if (here) res.sort((a, b) => km(here, a) - km(here, b));
+      if (res.length || !places.length) L.append(section(`Tide stations (${res.length})`, res.slice(0, 40), q.length < 3 ? "" : "No stations by that name."));
+    }
     return;
   }
-  L.append(section("Saved", favs, "Tap the star in the bottom bar to save a station."));
-  if (here && stations) L.append(section("Nearest to you", [...stations].sort((a, b) => km(here, a) - km(here, b)).slice(0, 12), ""));
+  if (!onboarding) L.append(section("Saved", favs, "Tap the star in the bottom bar to save a station."));
+  if (here && stations) L.append(section("Nearest to your spot", [...stations].sort((a, b) => km(here, a) - km(here, b)).slice(0, 12), ""));
 }
-function openSheet() { $("sheet").hidden = false; renderList(); if (!stations) loadStations().then(renderList).catch(() => { $("list").prepend(Object.assign(document.createElement("div"), { className: "empty", textContent: "Couldn't load the station list. Check your connection." })); }); setTimeout(() => $("q").focus(), 50); }
-function closeSheet() { $("sheet").hidden = true; $("q").value = ""; }
-$("stationBtn").addEventListener("click", openSheet);
+let onboarding = false;
+function openSheet(welcome = false) {
+  onboarding = welcome; $("welcome").hidden = !welcome; $("closeSheet").textContent = welcome ? "Skip" : "Close";
+  $("locate").classList.toggle("ghost", true);
+  $("sheet").hidden = false; renderList();
+  if (!stations) loadStations().then(renderList).catch(() => { $("list").prepend(Object.assign(document.createElement("div"), { className: "empty", textContent: "Couldn't load the station list. Check your connection." })); });
+  setTimeout(() => $("q").focus(), 50);
+}
+function closeSheet() { $("sheet").hidden = true; $("q").value = ""; places = []; if (onboarding) { onboarding = false; store.set("onboarded", true); } }
+$("stationBtn").addEventListener("click", () => openSheet(false));
 $("closeSheet").addEventListener("click", closeSheet);
-$("q").addEventListener("input", renderList);
+$("q").addEventListener("input", () => { searchPlaces($("q").value.trim()); renderList(); });
+$("q").addEventListener("keydown", e => { if (e.key === "Enter") { const first = $("list").querySelector(".st"); if (first) first.click(); } if (e.key === "Escape") closeSheet(); });
 $("locate").addEventListener("click", () => {
-  if (!navigator.geolocation) return;
+  if (!navigator.geolocation) { $("locate").textContent = "Location unavailable"; return; }
   $("locate").textContent = "Locating…";
-  navigator.geolocation.getCurrentPosition(p => {
-    here = { lat: p.coords.latitude, lng: p.coords.longitude }; store.set("here", here);
-    $("locate").textContent = "Find nearest to me";
-    (stations ? Promise.resolve() : loadStations()).then(renderList);
+  navigator.geolocation.getCurrentPosition(async p => {
+    $("locate").textContent = "Use my location instead";
+    await choosePlace({ name: "your location", lat: p.coords.latitude, lng: p.coords.longitude });
   }, () => { $("locate").textContent = "Location unavailable"; }, { timeout: 10000, maximumAge: 10 * MIN });
 });
 
@@ -524,19 +572,7 @@ new ResizeObserver(resize).observe(chart);
 document.fonts && document.fonts.ready.then(() => draw(true));
 setStation(station);
 resize();
-// First open: start at the station nearest the viewer (La Jolla stays as the fallback)
-if (firstRun && navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(async p => {
-    here = { lat: p.coords.latitude, lng: p.coords.longitude }; store.set("here", here);
-    try {
-      const list = await loadStations();
-      const byDist = [...list].sort((a, b) => km(here, a) - km(here, b));
-      // prefer a full-curve reference station if one is reasonably close
-      const ref = byDist.find(s => s.type === "R");
-      const pick = ref && km(here, ref) < Math.max(40, km(here, byDist[0]) * 2) ? ref : byDist[0];
-      if (pick && pick.id !== station.id && km(here, pick) < 500) setStation(pick);
-    } catch { /* keep the default */ }
-  }, () => {}, { timeout: 15000, maximumAge: 30 * MIN });
-}
+// First open: ask where they want tides for (typed search; location is optional)
+if (firstRun && !store.get("onboarded")) openSheet(true);
 setInterval(() => { if (!dragging && !anim && Math.abs(center - Date.now()) < 2 * MIN) { center = Date.now(); draw(); } }, 30e3);
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
