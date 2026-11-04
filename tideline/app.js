@@ -247,6 +247,39 @@ function updateWeather(t) {
   $("temp2").textContent = air != null ? `air ${air}°F` : "";
 }
 
+// ---------- sky: day / dusk / night at the cursor's moment ----------
+const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mix = (a, b, f) => a.map((v, i) => v + (b[i] - v) * f);
+const css = c => `rgb(${c.map(v => Math.round(v)).join(",")})`;
+const SKY = {
+  night: { top: hex("#061219"), mid: hex("#08192a"), bot: hex("#0d2436") },
+  day:   { top: hex("#2f6f9c"), mid: hex("#5a9cc6"), bot: hex("#a7d0e4") },
+  dusk:  { top: hex("#1f3556"), mid: hex("#6a5a7c"), bot: hex("#e39a63") },
+};
+const smooth = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+function skyAt(t) {
+  const s = sunTimes(localMidnight(t));
+  let day, dusk;
+  if (s.polar) { day = s.polar === "day" ? 1 : 0; dusk = 0; }
+  else {
+    day = smooth(s.rise - 25 * MIN, s.rise + 50 * MIN, t) * (1 - smooth(s.set - 50 * MIN, s.set + 25 * MIN, t));
+    dusk = Math.max(Math.exp(-(((t - s.rise) / (38 * MIN)) ** 2)), Math.exp(-(((t - s.set) / (38 * MIN)) ** 2)));
+  }
+  const out = {};
+  for (const k of ["top", "mid", "bot"]) out[k] = css(mix(mix(SKY.night[k], SKY.day[k], day), SKY.dusk[k], dusk * (k === "bot" ? 0.85 : 0.6)));
+  out.dim = css(mix(hex("#8aa6b1"), hex("#e3f0f6"), day * 0.8));
+  return out;
+}
+let lastSky = "";
+const appEl = document.querySelector(".app"), themeMeta = document.querySelector('meta[name="theme-color"]');
+function paintPage(sky) {
+  const key = sky.top + sky.mid; if (key === lastSky) return; lastSky = key;
+  appEl.style.background = `linear-gradient(to bottom, ${sky.top}, ${sky.mid})`;
+  document.documentElement.style.setProperty("--ink-dim", sky.dim);
+  document.body.style.background = sky.top;
+  if (themeMeta) themeMeta.setAttribute("content", sky.top);
+}
+
 // ---------- chart ----------
 const chart = $("chart"), cv = $("c"), ctx = cv.getContext("2d");
 let W = 0, H = 0, dpr = 1, pxPerMs = 0;
@@ -286,7 +319,10 @@ function draw(forceReadout) {
   if (!W) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
   const t0 = center - (W / 2) / pxPerMs, t1 = center + (W / 2) / pxPerMs, ds = days(t0, t1);
-  for (const d of ds) { const s = sunTimes(d); ctx.fillStyle = "rgba(120,180,205,0.06)"; ctx.fillRect(xOf(s.rise), 0, xOf(s.set) - xOf(s.rise), H); }
+  const sky = skyAt(center);
+  const sg = ctx.createLinearGradient(0, 0, 0, H); sg.addColorStop(0, sky.mid); sg.addColorStop(1, sky.bot);
+  ctx.fillStyle = sg; ctx.fillRect(0, 0, W, H);
+  paintPage(sky);
   if (yRange) { ctx.strokeStyle = "rgba(231,241,244,0.10)"; ctx.setLineDash([2, 5]); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, yOf(0)); ctx.lineTo(W, yOf(0)); ctx.stroke(); ctx.setLineDash([]); }
 
   // water: build runs where data exists
