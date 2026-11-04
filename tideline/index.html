@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tideline</title>
+<meta name="description" content="Free swipeable tide chart with live NOAA predictions, moon phase, sun times, wind and swell.">
+<meta name="theme-color" content="#061219">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tideline">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* One-screen instrument: readout on top, swipeable curve with a fixed center cursor, station bar at the bottom. Deliberate single night-sea theme. */
+:root {
+  --bg: #061219; --bg-2: #0f2a37; --bar: #040d12;
+  --ink: #e7f1f4; --ink-dim: #8aa6b1;
+  --buoy: #ffc861; --line: rgba(231,241,244,0.14);
+  --display: "Outfit", "Avenir Next", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--display); overflow: hidden; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+.app { height: 100%; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); background: radial-gradient(120% 60% at 20% 0%, var(--bg-2) 0%, var(--bg) 70%); }
+.gutter { padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+.readout { display: grid; grid-template-columns: auto 1fr; gap: 14px 16px; align-items: center; padding-block: 18px 10px; }
+.moon-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+#moon { width: 80px; height: 80px; }
+.date { font-weight: 500; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.phase { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); letter-spacing: 0.04em; text-align: center; }
+.height-wrap { text-align: right; min-width: 0; }
+.height { font-weight: 200; font-size: clamp(64px, 20vw, 104px); line-height: 0.9; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.height small { font-size: 0.24em; font-weight: 300; margin-left: 4px; color: var(--ink-dim); letter-spacing: 0; }
+.time { font-family: var(--mono); font-size: 17px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.next { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); margin-top: 4px; }
+.next b, .row b { color: var(--ink); font-weight: 500; }
+.row { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: 10px; letter-spacing: 0.02em; }
+.row > div { min-width: 0; }
+.row > div:nth-child(2) { text-align: center; } .row > div:nth-child(3) { text-align: right; }
+.row .k { display: block; text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.1em; margin-bottom: 2px; }
+.row .s { display: block; font-size: 10.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.cond { border-top: 0; padding-top: 0; }
+.chart { position: relative; flex: 1; min-height: 0; touch-action: none; cursor: grab; }
+.chart:active { cursor: grabbing; }
+#c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hint, .status { position: absolute; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 11px; pointer-events: none; white-space: nowrap; }
+.hint { bottom: 36px; opacity: .6; transition: opacity .6s; }
+.status { top: 10px; background: rgba(4,13,18,0.85); border: 1px solid var(--line); padding: 6px 12px; border-radius: 999px; color: var(--ink); }
+.status.err { color: #ffb4a2; }
+.bar { display: flex; align-items: center; gap: 8px; padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--bar); border-top: 1px solid var(--line); }
+.bar button { font: inherit; color: var(--ink); background: none; border: 0; cursor: pointer; border-radius: 10px; }
+.bar button:focus-visible, .sheet button:focus-visible, .sheet input:focus-visible { outline: 2px solid var(--buoy); outline-offset: 2px; }
+.icon-btn { width: 40px; height: 40px; display: grid; place-items: center; flex: none; }
+.icon-btn svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+#fav[aria-pressed="true"] svg { fill: var(--buoy); stroke: var(--buoy); }
+#stationBtn { flex: 1; min-width: 0; text-align: left; padding: 4px 6px; }
+#stationBtn strong { display: block; font-weight: 500; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#stationBtn span { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#now { font: 500 13px var(--mono) !important; color: var(--bg) !important; background: var(--buoy) !important; border-radius: 999px !important; padding: 9px 14px; transition: opacity .2s; flex: none; }
+#now.off { opacity: 0; pointer-events: none; }
+#dateInput { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+/* Station picker */
+.sheet { position: fixed; inset: 0; z-index: 20; background: var(--bg); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); }
+.sheet-head { display: flex; gap: 8px; align-items: center; padding-block: 14px 10px; }
+.sheet input[type=search] { flex: 1; min-width: 0; font: 400 16px var(--display); color: var(--ink); background: #0c1f29; border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; }
+.sheet .close { font: 500 14px var(--mono); color: var(--ink-dim); background: none; border: 0; padding: 10px 6px; cursor: pointer; }
+.locate { margin-bottom: 8px; font: 500 13px var(--mono); color: var(--bg); background: var(--buoy); border: 0; border-radius: 999px; padding: 9px 16px; cursor: pointer; align-self: flex-start; }
+.list { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.list h3 { font: 500 10px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-dim); margin: 16px 0 6px; }
+.st { width: 100%; display: flex; justify-content: space-between; gap: 12px; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); padding: 12px 0; cursor: pointer; font: inherit; }
+.st .n { font-size: 15px; min-width: 0; }
+.st .m { font: 400 11px var(--mono); color: var(--ink-dim); white-space: nowrap; text-align: right; }
+.empty { font: 400 12px var(--mono); color: var(--ink-dim); padding: 14px 0; }
+.foot { font: 400 10px var(--mono); color: var(--ink-dim); padding-block: 10px; line-height: 1.5; }
+.foot a { color: var(--ink-dim); }
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="readout gutter">
+    <div class="moon-wrap">
+      <canvas id="moon" width="160" height="160" aria-label="Moon phase"></canvas>
+      <div class="date" id="date">—</div>
+      <div class="phase" id="phase">—</div>
+    </div>
+    <div class="height-wrap">
+      <div class="height"><span id="h">—</span><small>ft</small></div>
+      <div class="time" id="t">—</div>
+      <div class="next" id="next">Loading tides…</div>
+    </div>
+    <div class="row">
+      <div><span class="k">Sunrise</span><b id="rise">—</b></div>
+      <div><span class="k">Sunset</span><b id="set">—</b></div>
+      <div><span class="k">Moon</span><b id="illum">—</b></div>
+    </div>
+    <div class="row cond">
+      <div><span class="k">Wind</span><b id="wind">—</b><span class="s" id="wind2"></span></div>
+      <div><span class="k">Swell</span><b id="swell">—</b><span class="s" id="swell2"></span></div>
+      <div><span class="k">Water · Air</span><b id="temp">—</b><span class="s" id="temp2"></span></div>
+    </div>
+  </section>
+  <div class="chart" id="chart">
+    <canvas id="c"></canvas>
+    <div class="status" id="status" hidden></div>
+    <div class="hint" id="hint">← swipe through time →</div>
+  </div>
+  <footer class="bar gutter">
+    <button class="icon-btn" id="fav" aria-pressed="false" aria-label="Save station"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/></svg></button>
+    <button id="stationBtn" aria-label="Change station"><strong id="stName">La Jolla</strong><span id="stMeta">NOAA 9410230 · MLLW</span></button>
+    <button class="icon-btn" id="calBtn" aria-label="Jump to date"><svg viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg></button>
+    <input type="date" id="dateInput" aria-hidden="true" tabindex="-1">
+    <button id="now" class="off">Now</button>
+  </footer>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-head gutter">
+    <input type="search" id="q" placeholder="Search stations, e.g. Scripps, Mission Bay" autocomplete="off" enterkeyhint="search">
+    <button class="close" id="closeSheet">Close</button>
+  </div>
+  <div class="gutter" style="display:flex"><button class="locate" id="locate">Find nearest to me</button></div>
+  <div class="list gutter" id="list"></div>
+  <div class="foot gutter">Tide predictions: NOAA CO-OPS (MLLW, feet). Wind, swell and temperature: Open-Meteo. Not for navigation.</div>
+</div>
+<script src="fallback.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
