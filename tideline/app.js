@@ -231,20 +231,24 @@ function wxAt(h, t) {
 }
 function fmtNum(v, d = 0) { return v == null || Number.isNaN(v) ? null : (+v).toFixed(d); }
 function updateWeather(t) {
-  const fi = wxAt(wx?.f, t), mi = wxAt(wx?.m, t);
-  const F = wx?.f, M = wx?.m;
+  const fi = wxAt(wx?.f, t), mi = wxAt(wx?.m, t), F = wx?.f, M = wx?.m;
   const ws = fi != null ? fmtNum(F.wind_speed_10m[fi]) : null;
-  $("wind").textContent = ws != null ? `${ws} mph ${compass(F.wind_direction_10m[fi])}` : "—";
-  $("wind2").textContent = fi != null && F.wind_gusts_10m[fi] != null ? `gusts ${fmtNum(F.wind_gusts_10m[fi])}` : "";
+  const wind = ws != null ? `${ws} mph ${compass(F.wind_direction_10m[fi])}` : null;
+  $("wind").textContent = wind ?? "—";
+  $("gust").textContent = fi != null && F.wind_gusts_10m[fi] != null ? `${fmtNum(F.wind_gusts_10m[fi])} mph` : "—";
+  const air = fi != null ? fmtNum(F.temperature_2m[fi]) : null;
+  $("air").textContent = air != null ? `${air}°F` : "—";
   const sh = mi != null ? fmtNum(M.swell_wave_height[mi], 1) : null;
   $("swell").textContent = sh != null ? `${sh} ft · ${fmtNum(M.swell_wave_period[mi])}s` : "—";
-  $("swell2").textContent = sh != null ? `${compass(M.swell_wave_direction[mi])} · seas ${fmtNum(M.wave_height[mi], 1) ?? "—"}` : "";
+  $("seas").textContent = mi != null && M.wave_height[mi] != null ? `seas ${fmtNum(M.wave_height[mi], 1)} ft` : "";
+  $("swellDir").textContent = mi != null && M.swell_wave_direction[mi] != null ? `${compass(M.swell_wave_direction[mi])} ${fmtNum(M.swell_wave_direction[mi])}°` : "—";
   const sst = mi != null && M.sea_surface_temperature[mi] != null ? (M.sea_surface_temperature[mi] * 9 / 5 + 32) : null;
-  const air = fi != null ? fmtNum(F.temperature_2m[fi]) : null;
   const usePier = pierTemp && Math.abs(t - pierTemp.t) < 3 * HOUR;
-  $("temp").textContent = usePier ? `${pierTemp.v.toFixed(0)}°F` : sst != null ? `${sst.toFixed(0)}°F` : "—";
-  $("tempK").textContent = usePier ? "Water (pier) · Air" : "Water · Air";
-  $("temp2").textContent = air != null ? `air ${air}°F` : "";
+  const water = usePier ? pierTemp.v : sst;
+  $("water").textContent = water != null ? `${water.toFixed(0)}°F` : "—";
+  $("waterK").textContent = usePier ? "Water · pier" : "Water";
+  const sum = [wind && `<b>${wind}</b>`, sh != null && `swell <b>${sh} ft</b>`, water != null && `water <b>${water.toFixed(0)}°</b>`].filter(Boolean);
+  $("condSum").innerHTML = sum.length ? sum.join(" · ") : "Sun, moon &amp; conditions";
 }
 
 // ---------- sky: day / dusk / night at the cursor's moment ----------
@@ -395,6 +399,10 @@ function updateReadout(force) {
   $("now").classList.toggle("off", Math.abs(center - Date.now()) < 10 * MIN);
 }
 
+const condOpen = store.get("condOpen", false);
+function setCond(open) { $("cond").hidden = !open; $("condToggle").setAttribute("aria-expanded", String(open)); store.set("condOpen", open); }
+setCond(condOpen);
+$("condToggle").addEventListener("click", () => setCond($("cond").hidden));
 let statusTimer;
 function showStatus(msg, err) { const s = $("status"); s.textContent = msg; s.classList.toggle("err", !!err); s.hidden = false; clearTimeout(statusTimer); if (err) statusTimer = setTimeout(hideStatus, 6000); }
 function hideStatus() { $("status").hidden = true; $("status").classList.remove("err"); }

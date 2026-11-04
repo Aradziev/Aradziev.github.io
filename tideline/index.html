@@ -43,12 +43,17 @@ body { background: var(--bg); color: var(--ink); font-family: var(--display); ov
 .time { font-family: var(--mono); font-size: 17px; margin-top: 8px; font-variant-numeric: tabular-nums; }
 .next { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); margin-top: 4px; }
 .next b, .row b { color: var(--ink); font-weight: 500; }
-.row { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: 10px; letter-spacing: 0.02em; }
-.row > div { min-width: 0; }
-.row > div:nth-child(2) { text-align: center; } .row > div:nth-child(3) { text-align: right; }
-.row .k { display: block; text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.1em; margin-bottom: 2px; }
-.row .s { display: block; font-size: 10.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row.cond { border-top: 0; padding-top: 0; }
+.cond-toggle { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; font: 400 12px var(--mono); color: var(--ink-dim); background: none; border: 0; border-top: 1px solid var(--line); padding: 10px 0 2px; cursor: pointer; text-align: left; }
+.cond-toggle span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cond-toggle b { color: var(--ink); font-weight: 500; }
+.cond-toggle svg { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; transition: transform .2s; }
+.cond-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.cond-toggle:focus-visible { outline: 2px solid var(--buoy); outline-offset: 2px; }
+.cond { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 10px; font-family: var(--mono); font-size: 13px; padding-top: 4px; }
+.cond > div { min-width: 0; }
+.cond b { display: block; color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.cond .k { display: block; text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.1em; color: var(--ink-dim); margin-bottom: 2px; }
+.cond .s { display: block; font-size: 11px; color: var(--ink-dim); margin-top: 1px; }
 .chart { position: relative; flex: 1; min-height: 0; touch-action: none; cursor: grab; }
 .chart:active { cursor: grabbing; }
 #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -97,15 +102,20 @@ body { background: var(--bg); color: var(--ink); font-family: var(--display); ov
       <div class="time" id="t">—</div>
       <div class="next" id="next">Loading tides…</div>
     </div>
-    <div class="row">
+    <button class="cond-toggle" id="condToggle" aria-expanded="false" aria-controls="cond">
+      <span id="condSum">Conditions</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="cond" id="cond" hidden>
       <div><span class="k">Sunrise</span><b id="rise">—</b></div>
       <div><span class="k">Sunset</span><b id="set">—</b></div>
       <div><span class="k">Moon</span><b id="illum">—</b></div>
-    </div>
-    <div class="row cond">
-      <div><span class="k">Wind</span><b id="wind">—</b><span class="s" id="wind2"></span></div>
-      <div><span class="k">Swell</span><b id="swell">—</b><span class="s" id="swell2"></span></div>
-      <div><span class="k" id="tempK">Water · Air</span><b id="temp">—</b><span class="s" id="temp2"></span></div>
+      <div><span class="k">Wind</span><b id="wind">—</b></div>
+      <div><span class="k">Gusts</span><b id="gust">—</b></div>
+      <div><span class="k">Air</span><b id="air">—</b></div>
+      <div><span class="k">Swell</span><b id="swell">—</b><span class="s" id="seas"></span></div>
+      <div><span class="k">Swell from</span><b id="swellDir">—</b></div>
+      <div><span class="k" id="waterK">Water</span><b id="water">—</b></div>
     </div>
   </section></div>
   <div class="chart" id="chart">
@@ -131,7 +141,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--display); ov
   <div class="list gutter" id="list"></div>
   <div class="foot gutter">Tide predictions: NOAA CO-OPS (MLLW, feet). Wind, swell and temperature: Open-Meteo. Not for navigation.</div>
 </div>
-<script src="fallback.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="fallback.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
